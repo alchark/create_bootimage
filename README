@@ -1,0 +1,45 @@
+*******************************
+* Create Boot Image for AC100 *
+*******************************
+
+This little perl script is used to create an all in one
+boot image, which is supposed to be loaded by tegrarcm[1]
+to the ac100 (or any other tegra device supported by tegrarcm).
+
+The purpose is that you don't need to flash an installer, thus
+avoiding proprietary applications like nvflash and fastboot. It
+is meant to include some installer in the initrd which takes care
+of partitioning, flashing (just dd to mmcblk*) and installing.
+
+The script takes 6 parameters:
+
+    - uboot image
+    - kernel image
+    - initrd image
+    - device tree (compiled, dtb)
+    - uboot script
+    - output file
+
+The uboot script is a text file with commands to be executed
+during start. It can contain the following variables:
+    @KERNEL, @INITRD, @FDT
+which are replaced by the corresponding load address, .e.g.
+
+"bootz @KERNEL @INITRD @FDT" is replaced by
+"bootz <kernel address> <initrd address> <fdt address>"
+
+The uboot image is patched so the unmodified uboot tree from e.g.
+git://git.denx.de/u-boot-tegra.git can be used without modifications.
+This is done by replacing the standard bootcmd string with
+"source <script address>", so the script is executed instead. This
+gives you all kinds of freedom.
+
+The resulting image can be loaded via tegrarcm[1] with e.g.
+
+tegrarcm --bct paz00.bct --bootloader bootimage.bin --loadaddr 0x108000
+
+where paz00.bct is the bct of your device[2] and bootimage.bin is the
+file created by this script.
+
+[1] http://nv-tegra.nvidia.com/gitweb/?p=tools/tegrarcm.git;a=summary
+[2] http://http.download.nvidia.com/tegra-public-appnotes/bct-overview.html
