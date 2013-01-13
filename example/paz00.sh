@@ -1,6 +1,7 @@
 #!/bin/bash -x
 
 CROSS_COMPILER=arm-linux-gnueabihf-
+MAKE="make -j4"
 BCT="paz00-micron-toshiba-8g.bct"
 
 UBOOT_DIR="u-boot-tegra"
@@ -12,8 +13,10 @@ KERNEL_REPO="-b linux-ac100-3.8 git://gitorious.org/~marvin24/ac100/marvin24s-ke
 TEGRARCM_DIR="tegrarcm"
 TEGRARCM_REPO="git://nv-tegra.nvidia.com/tools/tegrarcm.git"
 
-IMGURL="http://cdimage.ubuntu.com/daily-live/current"
-BASEIMG="raring-desktop-armhf+omap4.img"
+#IMGURL="http://cdimage.ubuntu.com/daily-live/current"
+#BASEIMG="raring-desktop-armhf+omap4.img"
+IMGURL="http://ports.ubuntu.com/ubuntu-ports/dists/raring/main/installer-armhf/current/images/omap4/netboot"
+UINITRD="uInitrd"
 MNTPNT=`pwd`/instimg
 
 update_dir() {
@@ -29,37 +32,40 @@ update_dir() {
     fi
 }
 
+rm -rf "$MNTPNT"
+mkdir -p $MNTPNT
+wget -c $IMGURL/$UINITRD
+dd if=$UINITRD of=initrd.cpio.gz bs=64 skip=1
+pushd $MNTPNT
+gzip -cd  ../initrd.cpio.gz | fakeroot -- cpio -i -d -H newc --no-absolute-filenames
+popd
+
 update_dir "$UBOOT_DIR" "$UBOOT_REPO"
-make paz00_config CROSS_COMPILE=$CROSS_COMPILER
-make CROSS_COMPILE=$CROSS_COMPILER
+$MAKE paz00_config CROSS_COMPILE=$CROSS_COMPILER
+$MAKE CROSS_COMPILE=$CROSS_COMPILER
 popd
 
 update_dir "$KERNEL_DIR" "$KERNEL_REPO"
-make paz00_defconfig ARCH=arm
-make zImage dtbs modules ARCH=arm CROSS_COMPILE=$CROSS_COMPILER INSTALL_MOD_PATH=/tmp INSTALL_MOD_STRIP=1
+$MAKE paz00_defconfig ARCH=arm
+$MAKE zImage dtbs modules ARCH=arm CROSS_COMPILE=$CROSS_COMPILER INSTALL_MOD_PATH=$MNTPNT INSTALL_MOD_STRIP=1
+rm -rf $MNTPNT/lib/modules
+$MAKE modules_install ARCH=arm CROSS_COMPILE=$CROSS_COMPILER INSTALL_MOD_PATH=$MNTPNT INSTALL_MOD_STRIP=1
 popd
 
-update_dir "$TREGRARCM_DIR" "$TEGRARCM_REPO"
+update_dir "$TEGRARCM_DIR" "$TEGRARCM_REPO"
 ./autogen.sh
-make
+$MAKE
 popd
 
-mkdir -p $MNTPNT
-wget -c $IMGURL/$BASEIMG
-LOOPDEV=/dev/mapper/`sudo losetup -f|sed -e "s/\/dev\///"`p2
-sudo kpartx -a -v $BASEIMG
-sudo mount $LOOPDEV $MNTPNT
-sudo mount -oloop $MNTPNT/casper/filesystem.squashfs $MNTPNT/install
-cp $MNTPNT/casper/filesystem.initrd-omap4 initrd.img
-mkimage -A arm -T ramdisk -C lzma -n initrd -d initrd.img initrd.uimg
-sudo umount $MNTPNT/install
-sudo umount $MNTPNT
-sudo kpartx -d $BASEIMG
+pushd "$MNTPNT"
+find . | cpio -R 0:0 -o -H newc | gzip -c9 > ../initrd.new.cpio.gz
+popd
+mkimage -A arm -T ramdisk -n "debian-install ramdisk" -d initrd.new.cpio.gz uInitrd.new
 
 ../create_image.pl \
 	$UBOOT_DIR/u-boot-dtb-tegra.bin \
 	$KERNEL_DIR/arch/arm/boot/zImage \
-	initrd.uimg \
+	uInitrd.new \
 	$KERNEL_DIR/arch/arm/boot/dts/tegra20-paz00.dtb \
 	uboot.scr \
 	boot.img

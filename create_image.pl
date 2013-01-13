@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 
 use File::Slurp qw( :edit );
+use File::Basename;
 
 if (@ARGV != 6) {
 	die "Usage: create_image.pl <uboot> <kernel> <initrd> <fdt> <script> <outfile>";
@@ -95,11 +96,14 @@ sub parse_script {
     $a = sprintf("0x%x", $kernel_a); $buf =~ s/\@KERNEL/$a/g;
     $a = sprintf("0x%x", $initrd_a); $buf =~ s/\@INITRD/$a/g;
     $a = sprintf("0x%x", $fdt_a);    $buf =~ s/\@FDT/$a/g;
-    open(USCRIPT, ">tmp_$script") or die;
+    $tmp_name = dirname($script) . "/tmp_" . basename($script);
+    $u_script = dirname($script) . "/u_" . basename($script);
+    print "$tmp_name\n";
+    open(USCRIPT, ">$tmp_name") or die("$!");
     print USCRIPT $buf;
     close(USCRIPT);
-    system("mkimage -A arm -T script -C none -n 'u-boot script' -d tmp_$script u_$script>/dev/null");
-    unlink("tmp_$script");
-    $script = "u_$script";
+    system("mkimage -A arm -T script -C none -n 'u-boot script' -d $tmp_name $u_script>/dev/null");
+    unlink($tmp_name);
+    $script = $u_script;
     $script_s = -s $script;
 }
